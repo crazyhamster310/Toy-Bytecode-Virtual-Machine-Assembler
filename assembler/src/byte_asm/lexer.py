@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import StrEnum, auto
 from string import ascii_letters, digits, whitespace
 
-from byte_asm.opcodes import INSTRUCTION_SET
+from byte_asm.isa import INSTRUCTION_SET
 
 
 class TokenType(StrEnum):

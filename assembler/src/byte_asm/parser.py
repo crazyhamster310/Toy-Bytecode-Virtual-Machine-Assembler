@@ -1,12 +1,12 @@
 from dataclasses import dataclass, replace
 
-import byte_asm.opcodes as op
+import byte_asm.isa as isa
 from byte_asm.lexer import Token, TokenType
 
 
 @dataclass(frozen=True, slots=True)
 class Instruction:
-    opcode: op.Opcode
+    opcode: isa.Opcode
     operand: int | None | str
     line: int
     column: int
@@ -87,9 +87,9 @@ class _TokenStream:
                 mnemonic = token.value
                 operand: str | int | None
 
-                if mnemonic in op.NULLARY_INSTRUCTIONS:
+                if mnemonic in isa.NULLARY_INSTRUCTIONS:
                     operand = None
-                elif mnemonic in op.VALUE_INSTRUCTIONS:
+                elif mnemonic in isa.VALUE_INSTRUCTIONS:
                     operand_token = self.advance()
                     if operand_token.type != TokenType.INTEGER:
                         raise InvalidOperandError(
@@ -104,7 +104,7 @@ class _TokenStream:
                         raise IntegerOverflowError(
                             operand_token.line, operand_token.column, operand
                         )
-                elif mnemonic in op.JUMP_INSTRUCTIONS:
+                elif mnemonic in isa.JUMP_INSTRUCTIONS:
                     operand_token = self.advance()
 
                     if operand_token.type == TokenType.INTEGER:
@@ -136,9 +136,9 @@ class _TokenStream:
                     )
 
                 self.instructions.append(
-                    Instruction(op.Opcode[mnemonic], operand, token.line, token.column)
+                    Instruction(isa.Opcode[mnemonic], operand, token.line, token.column)
                 )
-                self.offset += op.INSTRUCTION_SIZES.get(mnemonic, op.DEFAULT_INSTRUCTION_SIZE)
+                self.offset += isa.INSTRUCTION_SIZES.get(mnemonic, isa.DEFAULT_INSTRUCTION_SIZE)
 
                 continue
 
@@ -159,7 +159,7 @@ def _second_pass(
     result: list[Instruction] = []
     for inst in instructions:
         operand = inst.operand
-        if inst.opcode.name in op.JUMP_INSTRUCTIONS and isinstance(inst.operand, str):
+        if inst.opcode.name in isa.JUMP_INSTRUCTIONS and isinstance(inst.operand, str):
             if inst.operand not in symbol_table:
                 raise UndefinedLabelError(inst.line, inst.column, inst.operand)
             operand = symbol_table[inst.operand]
