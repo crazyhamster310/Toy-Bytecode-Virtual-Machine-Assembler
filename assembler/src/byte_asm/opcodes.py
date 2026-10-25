@@ -20,3 +20,11 @@ class Opcode(IntEnum):
 
 
 INSTRUCTION_SET: frozenset[str] = frozenset(op.name for op in Opcode)
+
+JUMP_INSTRUCTIONS: frozenset[str] = frozenset({"JMP", "JZ"})
+VALUE_INSTRUCTIONS: frozenset[str] = frozenset({"PUSH"})
+UNARY_INSTRUCTIONS: frozenset[str] = JUMP_INSTRUCTIONS | VALUE_INSTRUCTIONS
+NULLARY_INSTRUCTIONS: frozenset[str] = INSTRUCTION_SET - UNARY_INSTRUCTIONS
+
+INSTRUCTION_SIZES: dict[str, int] = {"PUSH": 5, "JMP": 5, "JZ": 5}
+DEFAULT_INSTRUCTION_SIZE: int = 1
