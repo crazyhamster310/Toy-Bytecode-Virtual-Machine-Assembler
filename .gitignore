@@ -288,3 +288,5 @@ Testing/
 .cache/
 
 .vscode/
+
+*.bin

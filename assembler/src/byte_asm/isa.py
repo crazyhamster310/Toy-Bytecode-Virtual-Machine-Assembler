@@ -6,6 +6,7 @@ class Opcode(IntEnum):
     PUSH = 0x01
     POP = 0x02
     DUP = 0x03
+    SWAP = 0x04
     ADD = 0x10
     SUB = 0x11
     MUL = 0x12
@@ -17,6 +18,8 @@ class Opcode(IntEnum):
     JMP = 0x30
     JZ = 0x31
     PRINT = 0x40
+    LOAD = 0x50
+    STORE = 0x51
 
 
 INSTRUCTION_SET: frozenset[str] = frozenset(op.name for op in Opcode)
