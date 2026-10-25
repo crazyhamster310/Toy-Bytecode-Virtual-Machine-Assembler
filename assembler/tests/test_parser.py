@@ -1,8 +1,8 @@
 import pytest
 
 import byte_asm.parser as par
+from byte_asm.isa import JUMP_INSTRUCTIONS, NULLARY_INSTRUCTIONS, UNARY_INSTRUCTIONS
 from byte_asm.lexer import tokenize
-from byte_asm.opcodes import JUMP_INSTRUCTIONS, NULLARY_INSTRUCTIONS, UNARY_INSTRUCTIONS
 
 
 def test_empty_program() -> None:

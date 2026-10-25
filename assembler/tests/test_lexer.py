@@ -1,5 +1,6 @@
 import pytest
 
+from byte_asm.isa import NULLARY_INSTRUCTIONS
 from byte_asm.lexer import (
     InvalidIdentifierError,
     InvalidNumberError,
@@ -8,7 +9,6 @@ from byte_asm.lexer import (
     UnexpectedSymbolError,
     tokenize,
 )
-from byte_asm.opcodes import NULLARY_INSTRUCTIONS
 
 
 def test_eof() -> None:
