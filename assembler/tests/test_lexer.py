@@ -8,6 +8,7 @@ from byte_asm.lexer import (
     UnexpectedSymbolError,
     tokenize,
 )
+from byte_asm.opcodes import NULLARY_INSTRUCTIONS
 
 
 def test_eof() -> None:
@@ -16,7 +17,7 @@ def test_eof() -> None:
     assert tokens[0].type == TokenType.EOF and tokens[0].value is None
 
 
-@pytest.mark.parametrize("mnemonic", ["ADD", "HALT", "POP", "PRINT"])
+@pytest.mark.parametrize("mnemonic", NULLARY_INSTRUCTIONS)
 def test_instructions(mnemonic: str) -> None:
     tokens = tokenize(mnemonic)
     assert len(tokens) == 2
@@ -145,10 +146,10 @@ def test_reserved_word() -> None:
 
 
 def test_source_mapping() -> None:
-    tokens = tokenize("PUSH 42\nPOP")
+    tokens = tokenize("PUSH 42\n POP")
     assert tokens[0].line == 1 and tokens[0].column == 1
     assert tokens[1].line == 1 and tokens[1].column == 6
-    assert tokens[3].line == 2 and tokens[3].column == 1
+    assert tokens[3].line == 2 and tokens[3].column == 2
 
 
 def test_unknown_symbols() -> None:
