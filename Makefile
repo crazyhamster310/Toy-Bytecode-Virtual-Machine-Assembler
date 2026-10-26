@@ -1,4 +1,4 @@
-.PHONY: help test-asm lint-asm format-asm check-asm check
+.PHONY: help setup-asm test-asm lint-asm format-asm check-asm check build-vm clean
 
 ASM_DIR   := assembler
 VENV_DIR  := $(CURDIR)/$(ASM_DIR)/.venv
@@ -8,11 +8,10 @@ PYTEST    := $(VENV_DIR)/bin/pytest
 RUFF      := $(VENV_DIR)/bin/ruff
 MYPY      := $(VENV_DIR)/bin/mypy
 
-all: check
+all: check build-vm
 
 help: ## Показать список доступных команд
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-16s\033[0m %s\n", $$1, $$2}'
-
 
 setup-asm: ## Создать .venv и установить ассемблер в dev-режиме
 	python3 -m venv $(VENV_DIR)
@@ -36,3 +35,10 @@ format-asm: | $(VENV_DIR) ## Автоформатирование кода ас�
 check-asm: lint-asm test-asm ## Полная проверка ассемблера (линтер, типы, тесты)
 
 check: check-asm ## Полная проверка всех компонентов проекта
+
+build-vm: ## Сборка виртуальной машины
+	cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug && cmake --build build
+
+clean: ## Очистка рабочих файлов
+	rm -rf build/
+	find . -type f -name "*.bin" -delete
