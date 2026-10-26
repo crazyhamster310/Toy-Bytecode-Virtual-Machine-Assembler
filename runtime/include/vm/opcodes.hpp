@@ -1,7 +1,6 @@
 #pragma once
 
 #include <array>
-#include <cstddef>
 #include <cstdint>
 #include <string_view>
 
@@ -25,15 +24,15 @@ enum class Opcode : uint8_t {
   JZ = 0x31,
   PRINT = 0x40,
   LOAD = 0x50,
-  STORE = 0x51
+  STORE = 0x51,
 };
 
 inline constexpr std::array<uint8_t, 4> MAGIC_BYTES{'B', 'V', 'M', '1'};
 inline constexpr uint16_t VERSION = 1;
-inline constexpr std::size_t HEADER_SIZE = 6;
+inline constexpr size_t HEADER_SIZE = 6;
 
-constexpr std::string_view to_string(Opcode op) {
-  switch (op) {
+constexpr std::string_view to_string(Opcode opcode) {
+  switch (opcode) {
     case Opcode::HALT:
       return "HALT";
     case Opcode::PUSH:
