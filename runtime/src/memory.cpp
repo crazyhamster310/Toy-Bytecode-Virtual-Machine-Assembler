@@ -39,25 +39,27 @@ void EvaluationStack::swap() {
   if (buf_size < 2) {
     throw StackUnderflowException();
   }
-  std::swap(buffer_.at(buf_size - 1), buffer_.at(buf_size - 2));
+  std::swap(buffer_[buf_size - 1], buffer_[buf_size - 2]);
 }
 
 size_t EvaluationStack::size() const { return buffer_.size(); }
 
 bool EvaluationStack::empty() const { return buffer_.empty(); }
 
+void EvaluationStack::reset() { buffer_.clear(); }
+
 int32_t LinearMemory::load(uint32_t address) const {
   if (static_cast<size_t>(address) >= size()) {
     throw MemoryOutOfBoundsException(static_cast<size_t>(address));
   }
-  return buffer_.at(address);
+  return buffer_[address];
 }
 
 void LinearMemory::store(uint32_t address, int32_t value) {
   if (static_cast<size_t>(address) >= size()) {
     throw MemoryOutOfBoundsException(static_cast<size_t>(address));
   }
-  buffer_.at(address) = value;
+  buffer_[address] = value;
 }
 
 size_t LinearMemory::size() const { return buffer_.size(); }

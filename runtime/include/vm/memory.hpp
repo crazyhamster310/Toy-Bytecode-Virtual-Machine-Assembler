@@ -7,12 +7,12 @@
 namespace vm {
 
 class EvaluationStack {
-private:
+ private:
   static constexpr size_t DEFAULT_MAX_SIZE = 16384;
   size_t max_size_;
   std::vector<int32_t> buffer_;
 
-public:
+ public:
   explicit EvaluationStack(size_t max_size = DEFAULT_MAX_SIZE) : max_size_(max_size) {
     buffer_.reserve(max_size);
   }
@@ -24,14 +24,15 @@ public:
   void swap();
   [[nodiscard]] size_t size() const;
   [[nodiscard]] bool empty() const;
+  void reset();
 };
 
 class LinearMemory {
-private:
+ private:
   static constexpr size_t DEFAULT_MEMORY_SIZE = 16384;
   std::vector<int32_t> buffer_;
 
-public:
+ public:
   explicit LinearMemory(size_t size = DEFAULT_MEMORY_SIZE) : buffer_(size, 0) {}
 
   [[nodiscard]] int32_t load(uint32_t address) const;

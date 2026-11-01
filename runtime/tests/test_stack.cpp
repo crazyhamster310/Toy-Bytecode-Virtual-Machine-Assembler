@@ -3,7 +3,7 @@
 #include "vm/errors.hpp"
 #include "vm/memory.hpp"
 
-TEST(StackTest, TestPushPop) {
+TEST(StackTest, PushPop) {
   vm::EvaluationStack stack;
   ASSERT_EQ(stack.size(), 0);
   ASSERT_TRUE(stack.empty());
@@ -24,7 +24,7 @@ TEST(StackTest, TestPushPop) {
   ASSERT_TRUE(stack.empty());
 }
 
-TEST(StackTest, TestDup) {
+TEST(StackTest, Dup) {
   vm::EvaluationStack stack;
   stack.push(1);
 
@@ -36,7 +36,7 @@ TEST(StackTest, TestDup) {
   ASSERT_EQ(stack.peek(), 1);
 }
 
-TEST(StackTest, TestSwap) {
+TEST(StackTest, Swap) {
   vm::EvaluationStack stack;
   stack.push(1);
   stack.push(2);
@@ -49,7 +49,7 @@ TEST(StackTest, TestSwap) {
   ASSERT_EQ(stack.peek(), 2);
 }
 
-TEST(StackTest, TestStackUnderflow) {
+TEST(StackTest, StackUnderflow) {
   vm::EvaluationStack stack;
 
   EXPECT_THROW(stack.pop(), vm::StackUnderflowException);
@@ -61,7 +61,7 @@ TEST(StackTest, TestStackUnderflow) {
   EXPECT_THROW(stack.swap(), vm::StackUnderflowException);
 }
 
-TEST(StackTest, TestStackOverflow) {
+TEST(StackTest, StackOverflow) {
   vm::EvaluationStack stack(1);
   stack.push(1);
 
@@ -70,4 +70,18 @@ TEST(StackTest, TestStackOverflow) {
 
   EXPECT_EQ(stack.size(), 1);
   EXPECT_EQ(stack.peek(), 1);
+}
+
+TEST(StackTest, ZeroCapacityStack) {
+  vm::EvaluationStack stack(0);
+  ASSERT_THROW(stack.push(1), vm::StackOverflowException);
+}
+
+TEST(StackTest, Reset) {
+  vm::EvaluationStack stack;
+  stack.push(1);
+  stack.push(2);
+  stack.reset();
+
+  ASSERT_TRUE(stack.empty());
 }

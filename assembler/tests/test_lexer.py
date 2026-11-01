@@ -36,6 +36,13 @@ def test_windows_newline() -> None:
     assert tokens[1].type == TokenType.NEWLINE
 
 
+def test_bare_carriage_return_error() -> None:
+    with pytest.raises(UnexpectedSymbolError) as excinfo:
+        tokenize("PUSH 42\r")
+
+    assert excinfo.value.line == 1 and excinfo.value.column == 8
+
+
 def test_multiple_newlines() -> None:
     tokens = tokenize("\n\nADD\n\nADD\n\n")
     assert len(tokens) == 4
@@ -124,6 +131,12 @@ def test_labels_no_space() -> None:
     assert tokens[0].value == "loop"
 
 
+def test_label_with_instruction_prefix() -> None:
+    tokens = tokenize("additional: PUSH 1\nJMP additional")
+    assert len(tokens) == 7
+    assert tokens[0].type == TokenType.LABEL_DEF and tokens[0].value == "additional"
+
+
 def test_digit_identifier() -> None:
     with pytest.raises(InvalidIdentifierError) as excinfo:
         tokenize("1loop:")
@@ -159,7 +172,11 @@ def test_unknown_symbols() -> None:
     assert excinfo.value.line == 1 and excinfo.value.column == 1
 
 
-@pytest.mark.parametrize("number", ["12a", "+", "-", "0x"])
+@pytest.mark.parametrize(
+    "number",
+    ["12a", "+", "-", "0x"],
+    ids=["unexpected_letter", "unary_plus", "unary_minus", "incomplete_hex_number"],
+)
 def test_invalid_number(number: str) -> None:
     with pytest.raises(InvalidNumberError) as excinfo:
         tokenize("PUSH " + number)

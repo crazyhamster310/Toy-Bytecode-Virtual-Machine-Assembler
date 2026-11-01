@@ -48,6 +48,7 @@ enable_testing()
 add_executable(vm_tests
     runtime/tests/test_stack.cpp
     runtime/tests/test_memory.cpp
+    runtime/tests/test_vm.cpp
 )
 target_link_libraries(vm_tests PRIVATE
     vm_project_options
