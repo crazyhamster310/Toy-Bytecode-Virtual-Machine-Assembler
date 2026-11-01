@@ -5,8 +5,9 @@ from byte_asm.isa import JUMP_INSTRUCTIONS, NULLARY_INSTRUCTIONS, UNARY_INSTRUCT
 from byte_asm.lexer import tokenize
 
 
-def test_empty_program() -> None:
-    program = par.parse(tokenize(""))
+@pytest.mark.parametrize("text", ["", "; comment\n"], ids=["empty_program", "empty_with_comment"])
+def test_empty_program(text: str) -> None:
+    program = par.parse(tokenize(text))
     assert program.instructions == []
     assert program.symbol_table == {}
 
@@ -115,7 +116,11 @@ def test_invalid_operand_type_push(argument: str) -> None:
     assert excinfo.value.line == 1 and excinfo.value.column == 6
 
 
-@pytest.mark.parametrize("text, column", [("PUSH 1 2", 8), ("ADD SUB", 5)])
+@pytest.mark.parametrize(
+    "text, column",
+    [("PUSH 1 2", 8), ("ADD SUB", 5)],
+    ids=["trailing_argument", "trailing_instruction"],
+)
 def test_trailing_tokens(text: str, column: int) -> None:
     with pytest.raises(par.InvalidOperandError) as excinfo:
         par.parse(tokenize(text))
@@ -126,6 +131,7 @@ def test_trailing_tokens(text: str, column: int) -> None:
 @pytest.mark.parametrize(
     "text, column",
     [(f"PUSH {1 << 31}", 6), (f"PUSH {-(1 << 31) - 1}", 6), ("JMP -1", 5), (f"JZ {1 << 32}", 4)],
+    ids=["push_pos_overflow", "push_neg_overflow", "negative_jump", "jz_overflow"],
 )
 def test_int_overflow(text: str, column: int) -> None:
     with pytest.raises(par.IntegerOverflowError) as excinfo:
