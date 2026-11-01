@@ -1,4 +1,4 @@
-.PHONY: help check clean
+.PHONY: help check clean test-e2e
 .PHONY: setup-asm test-asm lint-asm format-asm check-asm
 .PHONY: build-vm test-vm lint-vm format-vm check-vm
 
@@ -12,46 +12,66 @@ MYPY      := $(VENV_DIR)/bin/mypy
 
 all: check
 
-help: ## Показать список доступных команд
+help: ## Display this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
-check: check-asm check-vm ## Полная проверка всех компонентов проекта
+check: check-asm check-vm test-e2e ## Run all checks across assembler and virtual machine
 
-clean: ## Очистка рабочих файлов
+clean: ## Remove build artifacts and compiled bytecode files
 	rm -rf build/
 	find . -type f -name "*.bin" -delete
 
-setup-asm: ## Создать .venv и установить ассемблер в dev-режиме
+setup-asm: ## Create virtualenv and install assembler in dev-mode
 	python3 -m venv $(VENV_DIR)
 	$(PIP) install --upgrade pip
 	$(PIP) install -e "$(ASM_DIR)[dev]"
+	@echo "==> Done. Activate with: source $(ASM_DIR)/.venv/bin/activate"
 
 $(VENV_DIR):
-	@echo "Ошибка: виртуальное окружение не найдено. Выполните 'make setup-asm'."
+	@echo "error: virtual environment not found. Run 'make setup-asm' first."
 	@exit 1
 
-test-asm: | $(VENV_DIR) ## Запуск тестов ассемблера
+test-asm: | $(VENV_DIR) ## Run assembler tests
 	cd assembler && ${PYTEST} -v
 
-lint-asm: | $(VENV_DIR) ## Запуск линтера и проверки типов
+lint-asm: | $(VENV_DIR) ## Run assembler linters and type checkers
 	cd assembler && ${RUFF} check .
 	cd assembler && ${MYPY} src tests
 
-format-asm: | $(VENV_DIR) ## Автоформатирование кода ассемблера
+format-asm: | $(VENV_DIR) ## Format assembler source code
 	cd assembler && ${RUFF} format .
 
-check-asm: lint-asm test-asm ## Полная проверка ассемблера
+check-asm: lint-asm test-asm ## Run all assembler verifications
 
-build-vm: ## Сборка виртуальной машины
+build-vm: ## Configure and build virtual machine runtime
 	cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug && cmake --build build
 
-test-vm: build-vm ## Запуск тестов виртуальной машины
+test-vm: build-vm ## Run virtual machine tests
 	ctest --test-dir build --output-on-failure
 
-format-vm: ## Автоформатирование кода виртуальной машины
+format-vm: ## Format virtual machine source code
 	find runtime -name '*.hpp' -o -name '*.cpp' | xargs clang-format -i
 
-lint-vm: build-vm ## Запуск статического анализатора
+lint-vm: build-vm ## Run static analyzer on virtual machine code
 	clang-tidy -p build runtime/src/*.cpp runtime/tests/*.cpp
 
-check-vm: lint-vm test-vm ## Полная проверка виртуальной машины
+check-vm: lint-vm test-vm ## Run all VM verifications
+
+test-e2e: build-vm | $(VENV_DIR) ## Run end-to-end integration test
+	@echo "==> Running E2E: Factorial"
+	$(PYTHON) -m byte_asm.cli examples/factorial.asm -o examples/factorial.bin
+	@FACT_OUT=$$(./build/byte-vm examples/factorial.bin) && \
+	if [ "$$FACT_OUT" = "120" ]; then \
+		echo "    [PASS] factorial(5) = $$FACT_OUT"; \
+	else \
+		echo "    [FAIL] expected 120, got '$$FACT_OUT'" && exit 1; \
+	fi
+	@echo "==> Running E2E: Fibonacci"
+	$(PYTHON) -m byte_asm.cli examples/fibonacci.asm -o examples/fibonacci.bin
+	@FIB_OUT=$$(./build/byte-vm examples/fibonacci.bin) && \
+	if [ "$$FIB_OUT" = "55" ]; then \
+		echo "    [PASS] fibonacci(10) = $$FIB_OUT"; \
+	else \
+		echo "    [FAIL] expected 55, got '$$FIB_OUT'" && exit 1; \
+	fi
+	@echo "==> All E2E tests PASSED successfully!"
