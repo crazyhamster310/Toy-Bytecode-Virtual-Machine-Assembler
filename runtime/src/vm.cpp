@@ -1,6 +1,7 @@
 #include "vm/vm.hpp"
 
 #include <algorithm>
+#include <format>
 #include <limits>
 
 #include "vm/errors.hpp"
@@ -8,18 +9,22 @@
 namespace vm {
 
 void VirtualMachine::load_bytecode(std::span<const uint8_t> bytecode) {
-  if (bytecode.size() < HEADER_SIZE) {
-    throw VmException("Header is too short");
+  if (bytecode.size() < HEADER_SIZE) [[unlikely]] {
+    throw VmLoadError(ErrorCode::HeaderTooShort,
+                      std::format("header too short: expected at least {} bytes, got {}",
+                                  HEADER_SIZE, bytecode.size()));
   }
 
-  if (!std::ranges::equal(bytecode.first<4>(), MAGIC_BYTES)) {
-    throw VmException("Invalid magic bytes: not a BVM1 file");
+  if (!std::ranges::equal(bytecode.first<4>(), MAGIC_BYTES)) [[unlikely]] {
+    throw VmLoadError(ErrorCode::InvalidMagicBytes, "invalid magic bytes: expected 'BVM1'");
   }
 
   auto version = static_cast<uint16_t>(static_cast<uint32_t>(bytecode[4]) |
                                        (static_cast<uint32_t>(bytecode[5]) << 8U));
-  if (version != VERSION) {
-    throw VmException("Unsupported bytecode version");
+  if (version != VERSION) [[unlikely]] {
+    throw VmLoadError(
+        ErrorCode::UnsupportedVersion,
+        std::format("unsupported bytecode version: expected {}, got {}", VERSION, version));
   }
 
   bytecode_.assign(bytecode.begin() + HEADER_SIZE, bytecode.end());
@@ -29,17 +34,10 @@ void VirtualMachine::load_bytecode(std::span<const uint8_t> bytecode) {
   memory_.reset();
 }
 
-uint8_t VirtualMachine::fetch_u8() {
-  if (ip_ >= bytecode_.size()) {
-    throw VmException("Unexpected end of bytecode: expected opcode");
-  }
-
-  return bytecode_[ip_++];
-}
-
-int32_t VirtualMachine::fetch_i32() {
-  if (ip_ + 4 > bytecode_.size()) {
-    throw VmException("Unexpected end of bytecode: truncated int32 operand");
+int32_t VirtualMachine::fetch_i32(size_t instr_ip, Opcode opcode) {
+  if (ip_ + 4 > bytecode_.size()) [[unlikely]] {
+    throw VmRuntimeError(instr_ip, opcode, ErrorCode::TruncatedInstruction,
+                         "truncated instruction: expected 4-byte operand");
   }
 
   uint32_t uval = static_cast<uint32_t>(bytecode_[ip_]) |
@@ -50,9 +48,10 @@ int32_t VirtualMachine::fetch_i32() {
   return static_cast<int32_t>(uval);
 }
 
-uint32_t VirtualMachine::fetch_u32() {
-  if (ip_ + 4 > bytecode_.size()) {
-    throw VmException("Unexpected end of bytecode: truncated uint32 operand");
+uint32_t VirtualMachine::fetch_u32(size_t instr_ip, Opcode opcode) {
+  if (ip_ + 4 > bytecode_.size()) [[unlikely]] {
+    throw VmRuntimeError(instr_ip, opcode, ErrorCode::TruncatedInstruction,
+                         "truncated instruction: expected 4-byte operand");
   }
 
   uint32_t val = static_cast<uint32_t>(bytecode_[ip_]) |
@@ -63,13 +62,44 @@ uint32_t VirtualMachine::fetch_u32() {
   return val;
 }
 
+void VirtualMachine::require_stack(size_t count, size_t instr_ip, Opcode opcode) {
+  if (stack_.size() < count) [[unlikely]] {
+    throw VmRuntimeError(instr_ip, opcode, ErrorCode::StackUnderflow,
+                         std::format("stack underflow: requires {} operand(s), available: {}",
+                                     count, stack_.size()));
+  }
+}
+
+void VirtualMachine::ensure_stack_capacity(size_t needed, size_t instr_ip, Opcode opcode) {
+  if (needed > stack_.capacity() - stack_.size()) [[unlikely]] {
+    throw VmRuntimeError(instr_ip, opcode, ErrorCode::StackOverflow,
+                         std::format("stack overflow: requires {} slot(s), available: {}", needed,
+                                     stack_.capacity() - stack_.size()));
+  }
+}
+
+void VirtualMachine::require_memory_bounds(uint32_t address, size_t instr_ip, Opcode opcode) {
+  if (static_cast<size_t>(address) >= memory_.size()) [[unlikely]] {
+    throw VmRuntimeError(instr_ip, opcode, ErrorCode::MemoryOutOfBounds,
+                         std::format("memory out of bounds: address 0x{:08X} exceeds size {}",
+                                     address, memory_.size()));
+  }
+}
+
 void VirtualMachine::step() {
-  if (halted_) {
-    throw VmException("Execution attempted on halted machine");
+  if (halted_) [[unlikely]] {
+    throw VmRuntimeError(ip_, Opcode::HALT, ErrorCode::ExecutionHalted,
+                         "execution attempted on halted machine");
   }
 
-  uint8_t raw_op = fetch_u8();
-  auto opcode = static_cast<Opcode>(raw_op);
+  if (ip_ >= bytecode_.size()) [[unlikely]] {
+    throw VmRuntimeError(ip_, Opcode::HALT, ErrorCode::MissingHalt,
+                         "unexpected end of bytecode: missing HALT instruction");
+  }
+
+  const size_t instr_ip = ip_;
+  const uint8_t raw_op = bytecode_[ip_++];
+  const auto opcode = static_cast<Opcode>(raw_op);
 
   switch (opcode) {
     case Opcode::HALT: {
@@ -77,121 +107,150 @@ void VirtualMachine::step() {
       break;
     }
     case Opcode::PUSH: {
-      stack_.push(fetch_i32());
+      ensure_stack_capacity(1, instr_ip, opcode);
+      stack_.push(fetch_i32(instr_ip, opcode));
       break;
     }
     case Opcode::POP: {
+      require_stack(1, instr_ip, opcode);
       stack_.pop();
       break;
     }
     case Opcode::DUP: {
+      require_stack(1, instr_ip, opcode);
+      ensure_stack_capacity(1, instr_ip, opcode);
       stack_.dup();
       break;
     }
     case Opcode::SWAP: {
+      require_stack(2, instr_ip, opcode);
       stack_.swap();
       break;
     }
     case Opcode::ADD: {
+      require_stack(2, instr_ip, opcode);
       int32_t rhs = stack_.pop();
       int32_t lhs = stack_.pop();
       stack_.push(static_cast<int32_t>(static_cast<uint32_t>(lhs) + static_cast<uint32_t>(rhs)));
       break;
     }
     case Opcode::SUB: {
+      require_stack(2, instr_ip, opcode);
       int32_t rhs = stack_.pop();
       int32_t lhs = stack_.pop();
       stack_.push(static_cast<int32_t>(static_cast<uint32_t>(lhs) - static_cast<uint32_t>(rhs)));
       break;
     }
     case Opcode::MUL: {
+      require_stack(2, instr_ip, opcode);
       int32_t rhs = stack_.pop();
       int32_t lhs = stack_.pop();
       stack_.push(static_cast<int32_t>(static_cast<uint32_t>(lhs) * static_cast<uint32_t>(rhs)));
       break;
     }
     case Opcode::DIV: {
+      require_stack(2, instr_ip, opcode);
       int32_t rhs = stack_.pop();
       int32_t lhs = stack_.pop();
 
-      if (rhs == 0) {
-        throw DivisionByZeroException();
+      if (rhs == 0) [[unlikely]] {
+        throw VmRuntimeError(instr_ip, opcode, ErrorCode::DivisionByZero, "division by zero");
       }
 
-      if (lhs == std::numeric_limits<int32_t>::min() && rhs == -1) {
-        throw VmException("Signed arithmetic overflow in division");
+      if (lhs == std::numeric_limits<int32_t>::min() && rhs == -1) [[unlikely]] {
+        throw VmRuntimeError(instr_ip, opcode, ErrorCode::SignedOverflow,
+                             "signed arithmetic overflow in division");
       }
 
       stack_.push(lhs / rhs);
       break;
     }
     case Opcode::MOD: {
+      require_stack(2, instr_ip, opcode);
       int32_t rhs = stack_.pop();
       int32_t lhs = stack_.pop();
 
-      if (rhs == 0) {
-        throw DivisionByZeroException();
+      if (rhs == 0) [[unlikely]] {
+        throw VmRuntimeError(instr_ip, opcode, ErrorCode::DivisionByZero, "division by zero");
       }
 
-      if (lhs == std::numeric_limits<int32_t>::min() && rhs == -1) {
-        throw VmException("Signed arithmetic overflow in modulo");
+      if (lhs == std::numeric_limits<int32_t>::min() && rhs == -1) [[unlikely]] {
+        throw VmRuntimeError(instr_ip, opcode, ErrorCode::SignedOverflow,
+                             "signed arithmetic overflow in modulo");
       }
 
       stack_.push(lhs % rhs);
       break;
     }
     case Opcode::EQ: {
+      require_stack(2, instr_ip, opcode);
       int32_t rhs = stack_.pop();
       int32_t lhs = stack_.pop();
       stack_.push(lhs == rhs ? 1 : 0);
       break;
     }
     case Opcode::LT: {
+      require_stack(2, instr_ip, opcode);
       int32_t rhs = stack_.pop();
       int32_t lhs = stack_.pop();
       stack_.push(lhs < rhs ? 1 : 0);
       break;
     }
     case Opcode::GT: {
+      require_stack(2, instr_ip, opcode);
       int32_t rhs = stack_.pop();
       int32_t lhs = stack_.pop();
       stack_.push(lhs > rhs ? 1 : 0);
       break;
     }
     case Opcode::JMP: {
-      auto address = static_cast<size_t>(fetch_u32());
-      if (address >= bytecode_.size()) {
-        throw VmException("Jump target out of bounds");
+      auto address = static_cast<size_t>(fetch_u32(instr_ip, opcode));
+      if (address >= bytecode_.size()) [[unlikely]] {
+        throw VmRuntimeError(
+            instr_ip, opcode, ErrorCode::JumpOutOfBounds,
+            std::format("jump out of bounds: target offset 0x{:08X} exceeds bytecode size {}",
+                        address, bytecode_.size()));
       }
       ip_ = address;
       break;
     }
     case Opcode::JZ: {
-      auto address = static_cast<size_t>(fetch_u32());
-      if (address >= bytecode_.size()) {
-        throw VmException("Jump target out of bounds");
+      auto address = static_cast<size_t>(fetch_u32(instr_ip, opcode));
+      if (address >= bytecode_.size()) [[unlikely]] {
+        throw VmRuntimeError(
+            instr_ip, opcode, ErrorCode::JumpOutOfBounds,
+            std::format("jump out of bounds: target offset 0x{:08X} exceeds bytecode size {}",
+                        address, bytecode_.size()));
       }
+      require_stack(1, instr_ip, opcode);
       if (stack_.pop() == 0) {
         ip_ = address;
       }
       break;
     }
     case Opcode::PRINT: {
+      require_stack(1, instr_ip, opcode);
       out_.get() << stack_.pop() << '\n';
       break;
     }
     case Opcode::LOAD: {
-      stack_.push(memory_.load(static_cast<uint32_t>(stack_.pop())));
+      require_stack(1, instr_ip, opcode);
+      auto address = static_cast<uint32_t>(stack_.pop());
+      require_memory_bounds(address, instr_ip, opcode);
+      stack_.push(memory_.load(address));
       break;
     }
     case Opcode::STORE: {
+      require_stack(2, instr_ip, opcode);
       auto address = static_cast<uint32_t>(stack_.pop());
+      require_memory_bounds(address, instr_ip, opcode);
       int32_t value = stack_.pop();
       memory_.store(address, value);
       break;
     }
     default:
-      throw InvalidOpcodeException(raw_op);
+      throw VmRuntimeError(instr_ip, opcode, ErrorCode::InvalidOpcode,
+                           std::format("invalid opcode: 0x{:02X}", raw_op));
   }
 }
 

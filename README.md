@@ -16,12 +16,15 @@ make setup-asm
 
 # Run linters, type checks, unit tests, and E2E validation
 make check
+
+# Build optimized release binary
+make build-vm-release
 ```
 
 Assemble and execute an example:
 ```bash
 assembler/.venv/bin/byte-asm examples/factorial.asm -o examples/factorial.bin
-./build/byte-vm examples/factorial.bin
+./build/release/byte-vm examples/factorial.bin
 # Output: 120
 ```
 
@@ -112,20 +115,9 @@ end:
 │   │   └── vm.hpp        # VirtualMachine class definition
 │   ├── src/
 │   │   ├── main.cpp      # CLI binary entry point
-│   │   ├── memory.cpp
 │   │   └── vm.cpp        # Instruction dispatch loop
 │   └── tests/            # GoogleTest unit tests
 └── examples/
     ├── factorial.asm
     └── fibonacci.asm
 ```
-
-## Technical Details
-
-- **Assembler**: No external dependencies beyond the standard library (`struct`, `dataclasses`, `enum`, `pathlib`). Checked with `mypy --strict` and `ruff`.
-- **Runtime**: C++20. Builds with `-Wall -Wextra -Wpedantic -Werror -Wconversion -Wshadow -Wswitch-enum`.
-- **Sanitizers**: AddressSanitizer and UndefinedBehaviorSanitizer are enabled by default in Debug builds.
-- **Testing**:
-  - Python: `pytest` with equivalence boundary coverage.
-  - C++: GoogleTest parameterized suites (`TEST_P`) for underflows, binary limit handling, and table-driven comparisons.
-  - E2E: Shell-based integration verifying `.asm` -> `.bin` -> VM execution against known outputs.

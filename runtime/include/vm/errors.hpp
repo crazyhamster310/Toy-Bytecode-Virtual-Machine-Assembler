@@ -2,40 +2,61 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <format>
 #include <stdexcept>
+#include <string_view>
+
+#include "vm/opcodes.hpp"
 
 namespace vm {
 
+enum class ErrorCode : uint8_t {
+  HeaderTooShort,
+  InvalidMagicBytes,
+  UnsupportedVersion,
+
+  StackUnderflow,
+  StackOverflow,
+  MemoryOutOfBounds,
+  JumpOutOfBounds,
+  DivisionByZero,
+  SignedOverflow,
+  InvalidOpcode,
+  TruncatedInstruction,
+  MissingHalt,
+  ExecutionHalted,
+};
+
 class VmException : public std::runtime_error {
+ private:
+  ErrorCode code_;
+
  public:
-  using std::runtime_error::runtime_error;
+  VmException(ErrorCode code, std::string_view message)
+      : std::runtime_error(std::string(message)), code_(code) {}
+
+  [[nodiscard]] ErrorCode code() const noexcept { return code_; }
 };
 
-class StackUnderflowException : public VmException {
+class VmLoadError : public VmException {
  public:
-  StackUnderflowException() : VmException("Stack underflow: evaluated empty stack") {}
+  using VmException::VmException;
 };
 
-class StackOverflowException : public VmException {
- public:
-  StackOverflowException() : VmException("Stack overflow: maximum stack depth exceeded") {}
-};
+class VmRuntimeError : public VmException {
+ private:
+  size_t ip_;
+  Opcode opcode_;
 
-class MemoryOutOfBoundsException : public VmException {
  public:
-  explicit MemoryOutOfBoundsException(size_t address)
-      : VmException("Memory access out of bounds at address: " + std::to_string(address)) {}
-};
+  VmRuntimeError(size_t instr_ip, Opcode opcode, ErrorCode code, std::string_view message)
+      : VmException(code,
+                    std::format("[IP: 0x{:04X}] ({}): {}", instr_ip, to_string(opcode), message)),
+        ip_(instr_ip),
+        opcode_(opcode) {}
 
-class DivisionByZeroException : public VmException {
- public:
-  DivisionByZeroException() : VmException("Division by zero") {}
-};
-
-class InvalidOpcodeException : public VmException {
- public:
-  explicit InvalidOpcodeException(uint8_t opcode)
-      : VmException("Invalid opcode: " + std::to_string(opcode)) {}
+  [[nodiscard]] Opcode opcode() const noexcept { return opcode_; }
+  [[nodiscard]] size_t ip() const noexcept { return ip_; }
 };
 
 }  // namespace vm
