@@ -1,4 +1,4 @@
-PUSH 10
+READ
 PUSH 0
 STORE
 

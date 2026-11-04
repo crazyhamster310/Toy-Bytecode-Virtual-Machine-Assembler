@@ -25,6 +25,7 @@ enum class ErrorCode : uint8_t {
   TruncatedInstruction,
   MissingHalt,
   ExecutionHalted,
+  InputFailure,
 };
 
 class VmException : public std::runtime_error {

@@ -59,6 +59,8 @@ class BytecodeBuilder {
   BytecodeBuilder& gt() { return write_opcode(Opcode::GT); }
 
   BytecodeBuilder& print() { return write_opcode(Opcode::PRINT); }
+  BytecodeBuilder& read() { return write_opcode(Opcode::READ); }
+  BytecodeBuilder& putc() { return write_opcode(Opcode::PUTC); }
 
   BytecodeBuilder& load() { return write_opcode(Opcode::LOAD); }
   BytecodeBuilder& store() { return write_opcode(Opcode::STORE); }
@@ -207,6 +209,61 @@ TEST(SystemIoTest, PrintInstruction) {
   ASSERT_EQ(oss.view(), "1\n-1\n2147483647\n-2147483648\n");
 }
 
+TEST(SystemIoTest, ReadInstruction) {
+  auto code = vm::test::BytecodeBuilder().read().halt().build();
+
+  std::istringstream iss("1\n");
+  std::ostringstream oss;
+  vm::VirtualMachine virt(vm::VmConfig(), oss, iss);
+  virt.load_bytecode(code);
+  virt.run();
+
+  ASSERT_EQ(virt.stack().size(), 1);
+  ASSERT_EQ(virt.stack().peek(), 1);
+}
+
+TEST(SystemIoTest, InputFailureOnEmpty) {
+  auto code = vm::test::BytecodeBuilder().read().halt().build();
+
+  std::istringstream iss("");
+  std::ostringstream oss;
+  vm::VirtualMachine virt(vm::VmConfig(), oss, iss);
+  virt.load_bytecode(code);
+  expect_vm_runtime_error([&] { virt.run(); }, vm::ErrorCode::InputFailure, 0, vm::Opcode::READ);
+}
+
+TEST(SystemIoTest, InputFailureOnNotNumber) {
+  auto code = vm::test::BytecodeBuilder().read().halt().build();
+
+  std::istringstream iss("abba\n");
+  std::ostringstream oss;
+  vm::VirtualMachine virt(vm::VmConfig(), oss, iss);
+  virt.load_bytecode(code);
+  expect_vm_runtime_error([&] { virt.run(); }, vm::ErrorCode::InputFailure, 0, vm::Opcode::READ);
+}
+
+TEST(SystemIoTest, StackOverflowRead) {
+  auto code = vm::test::BytecodeBuilder().push(1).read().halt().build();
+  std::istringstream iss("42\n");
+  std::ostringstream oss;
+  vm::VirtualMachine virt(vm::VmConfig{.stack_size = 1}, oss, iss);
+  virt.load_bytecode(code);
+
+  ASSERT_NO_THROW(virt.step());
+  expect_vm_runtime_error([&] { virt.step(); }, vm::ErrorCode::StackOverflow, 5, vm::Opcode::READ);
+}
+
+TEST(SystemIoTest, PutcInstruction) {
+  auto code = vm::test::BytecodeBuilder().push(65).putc().halt().build();
+
+  std::ostringstream oss;
+  vm::VirtualMachine virt(vm::VmConfig(), oss);
+  virt.load_bytecode(code);
+  virt.run();
+
+  ASSERT_EQ(oss.str(), "A");
+}
+
 TEST(LifecycleTest, StateResetOnReload) {
   auto code = vm::test::BytecodeBuilder().push(0).push(1).store().push(1).halt().build();
 
@@ -247,7 +304,7 @@ TEST_P(UnaryUnderflowTest, ThrowsOnEmptyStack) {
 
 INSTANTIATE_TEST_SUITE_P(UnaryOperations, UnaryUnderflowTest,
                          testing::Values(vm::Opcode::DUP, vm::Opcode::LOAD, vm::Opcode::POP,
-                                         vm::Opcode::PRINT));
+                                         vm::Opcode::PRINT, vm::Opcode::PUTC));
 
 class BinaryUnderflowTest : public testing::TestWithParam<vm::Opcode> {};
 
@@ -347,7 +404,7 @@ TEST(StackOperationsTest, Swap) {
   ASSERT_EQ(virt.stack().peek(), 2);
 }
 
-TEST(StackOperationsTest, StackOverflow) {
+TEST(StackOperationsTest, StackOverflowPush) {
   auto code = vm::test::BytecodeBuilder().push(1).push(2).halt().build();
 
   vm::VirtualMachine virt({.stack_size = 1});
@@ -355,6 +412,15 @@ TEST(StackOperationsTest, StackOverflow) {
 
   ASSERT_NO_THROW(virt.step());
   expect_vm_runtime_error([&] { virt.step(); }, vm::ErrorCode::StackOverflow, 5, vm::Opcode::PUSH);
+}
+
+TEST(StackOperationsTest, StackOverflowDup) {
+  auto code = vm::test::BytecodeBuilder().push(1).dup().halt().build();
+  vm::VirtualMachine virt({.stack_size = 1});
+  virt.load_bytecode(code);
+
+  ASSERT_NO_THROW(virt.step());
+  expect_vm_runtime_error([&] { virt.step(); }, vm::ErrorCode::StackOverflow, 5, vm::Opcode::DUP);
 }
 
 struct ArithmeticParam {
