@@ -13,7 +13,6 @@ endif()
 
 add_library(vm_core STATIC
     runtime/src/vm.cpp
-    runtime/src/memory.cpp
 )
 target_include_directories(vm_core PUBLIC runtime/include)
 
@@ -35,26 +34,28 @@ endif()
 target_link_libraries(vm_core PRIVATE vm_project_options)
 target_link_libraries(byte-vm PRIVATE vm_project_options)
 
-include(FetchContent)
-FetchContent_Declare(
-  googletest
-  URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
-)
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(googletest)
+include(CTest)
 
-enable_testing()
+if(BUILD_TESTING)
+    include(FetchContent)
+    FetchContent_Declare(
+      googletest
+      URL https://github.com/google/googletest/archive/03597a01ee50ed33e9dfd640b249b4be3799d395.zip
+    )
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
 
-add_executable(vm_tests
-    runtime/tests/test_stack.cpp
-    runtime/tests/test_memory.cpp
-    runtime/tests/test_vm.cpp
-)
-target_link_libraries(vm_tests PRIVATE
-    vm_project_options
-    vm_core
-    GTest::gtest_main
-)
+    add_executable(vm_tests
+        runtime/tests/test_stack.cpp
+        runtime/tests/test_memory.cpp
+        runtime/tests/test_vm.cpp
+    )
+    target_link_libraries(vm_tests PRIVATE
+        vm_project_options
+        vm_core
+        GTest::gtest_main
+    )
 
-include(GoogleTest)
-gtest_discover_tests(vm_tests)
+    include(GoogleTest)
+    gtest_discover_tests(vm_tests)
+endif()

@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
 
+#include <concepts>
+#include <source_location>
+
 #include "vm/errors.hpp"
 #include "vm/opcodes.hpp"
 #include "vm/vm.hpp"
@@ -71,11 +74,48 @@ class BytecodeBuilder {
 
 }  // namespace vm::test
 
+namespace {
+
+void expect_vm_runtime_error(std::invocable auto&& func, vm::ErrorCode expected_code,
+                             size_t expected_ip, vm::Opcode expected_opcode,
+                             const std::source_location& loc = std::source_location::current()) {
+  testing::ScopedTrace trace(loc.file_name(), static_cast<int>(loc.line()),
+                             "expect_vm_runtime_error");
+
+  try {
+    func();
+    FAIL() << "Expected VmRuntimeError with code " << static_cast<int>(expected_code);
+  } catch (const vm::VmRuntimeError& err) {
+    EXPECT_EQ(err.code(), expected_code);
+    EXPECT_EQ(err.ip(), expected_ip);
+    EXPECT_EQ(err.opcode(), expected_opcode);
+  } catch (const std::exception& e) {
+    FAIL() << "Expected VmRuntimeError, but caught: " << e.what();
+  }
+}
+
+void expect_vm_load_error(std::invocable auto&& func, vm::ErrorCode expected_code,
+                          const std::source_location& loc = std::source_location::current()) {
+  testing::ScopedTrace trace(loc.file_name(), static_cast<int>(loc.line()), "expect_vm_load_error");
+
+  try {
+    func();
+    FAIL() << "Expected VmLoadError with code " << static_cast<int>(expected_code);
+  } catch (const vm::VmLoadError& err) {
+    EXPECT_EQ(err.code(), expected_code);
+  } catch (const std::exception& e) {
+    FAIL() << "Expected VmLoadError, but caught: " << e.what();
+  }
+}
+
+}  // namespace
+
 TEST(HeaderValidationTest, BadMagicBytes) {
   std::vector<uint8_t> header = {
       'B', 'V', 'M', '2', 0x01, 0x00,
   };
-  ASSERT_THROW(vm::VirtualMachine().load_bytecode(header), vm::VmException);
+  expect_vm_load_error([&] { vm::VirtualMachine().load_bytecode(header); },
+                       vm::ErrorCode::InvalidMagicBytes);
 }
 
 TEST(HeaderValidationTest, TruncatedHeader) {
@@ -83,14 +123,16 @@ TEST(HeaderValidationTest, TruncatedHeader) {
       'B',
       'V',
   };
-  ASSERT_THROW(vm::VirtualMachine().load_bytecode(header), vm::VmException);
+  expect_vm_load_error([&] { vm::VirtualMachine().load_bytecode(header); },
+                       vm::ErrorCode::HeaderTooShort);
 }
 
 TEST(HeaderValidationTest, WrongVersion) {
   std::vector<uint8_t> header = {
       'B', 'V', 'M', '1', 0x02, 0x00,
   };
-  ASSERT_THROW(vm::VirtualMachine().load_bytecode(header), vm::VmException);
+  expect_vm_load_error([&] { vm::VirtualMachine().load_bytecode(header); },
+                       vm::ErrorCode::UnsupportedVersion);
 }
 
 TEST(HeaderValidationTest, ValidHeader) {
@@ -108,7 +150,7 @@ TEST_P(TruncatedImmediateTest, ThrowsWhenOperandIsTruncated) {
   };
   vm::VirtualMachine virt;
   virt.load_bytecode(code);
-  ASSERT_THROW(virt.run(), vm::VmException);
+  expect_vm_runtime_error([&] { virt.run(); }, vm::ErrorCode::TruncatedInstruction, 0, GetParam());
 }
 
 INSTANTIATE_TEST_SUITE_P(UnaryOperations, TruncatedImmediateTest,
@@ -120,7 +162,8 @@ TEST(SystemIoTest, InvalidOpcode) {
   };
   vm::VirtualMachine virt;
   virt.load_bytecode(code);
-  ASSERT_THROW(virt.run(), vm::InvalidOpcodeException);
+  expect_vm_runtime_error([&] { virt.run(); }, vm::ErrorCode::InvalidOpcode, 0,
+                          static_cast<vm::Opcode>(0xFE));
 }
 
 TEST(SystemIoTest, MissingHaltThrows) {
@@ -128,7 +171,7 @@ TEST(SystemIoTest, MissingHaltThrows) {
 
   vm::VirtualMachine virt;
   virt.load_bytecode(code);
-  ASSERT_THROW(virt.run(), vm::VmException);
+  expect_vm_runtime_error([&] { virt.run(); }, vm::ErrorCode::MissingHalt, 5, vm::Opcode::HALT);
 }
 
 TEST(SystemIoTest, HaltStopsExecution) {
@@ -184,7 +227,8 @@ TEST(LifecycleTest, StepAfterHaltThrows) {
   vm::VirtualMachine virt;
   virt.load_bytecode(code);
   virt.run();
-  ASSERT_THROW(virt.step(), vm::VmException);
+  expect_vm_runtime_error([&] { virt.step(); }, vm::ErrorCode::ExecutionHalted, 1,
+                          vm::Opcode::HALT);
 }
 
 TEST(LifecycleTest, ExecutionWithoutBytecodeThrows) {
@@ -198,7 +242,7 @@ TEST_P(UnaryUnderflowTest, ThrowsOnEmptyStack) {
 
   vm::VirtualMachine virt;
   virt.load_bytecode(code);
-  ASSERT_THROW(virt.run(), vm::StackUnderflowException);
+  expect_vm_runtime_error([&] { virt.run(); }, vm::ErrorCode::StackUnderflow, 0, GetParam());
 }
 
 INSTANTIATE_TEST_SUITE_P(UnaryOperations, UnaryUnderflowTest,
@@ -212,7 +256,7 @@ TEST_P(BinaryUnderflowTest, ThrowsOnEmptyStack) {
 
   vm::VirtualMachine virt;
   virt.load_bytecode(code);
-  ASSERT_THROW(virt.run(), vm::StackUnderflowException);
+  expect_vm_runtime_error([&] { virt.run(); }, vm::ErrorCode::StackUnderflow, 0, GetParam());
 }
 
 TEST_P(BinaryUnderflowTest, ThrowsOnSingleOperand) {
@@ -220,7 +264,7 @@ TEST_P(BinaryUnderflowTest, ThrowsOnSingleOperand) {
 
   vm::VirtualMachine virt;
   virt.load_bytecode(code);
-  ASSERT_THROW(virt.run(), vm::StackUnderflowException);
+  expect_vm_runtime_error([&] { virt.run(); }, vm::ErrorCode::StackUnderflow, 5, GetParam());
 }
 
 INSTANTIATE_TEST_SUITE_P(BinaryOperations, BinaryUnderflowTest,
@@ -310,7 +354,7 @@ TEST(StackOperationsTest, StackOverflow) {
   virt.load_bytecode(code);
 
   ASSERT_NO_THROW(virt.step());
-  ASSERT_THROW(virt.step(), vm::StackOverflowException);
+  expect_vm_runtime_error([&] { virt.step(); }, vm::ErrorCode::StackOverflow, 5, vm::Opcode::PUSH);
 }
 
 struct ArithmeticParam {
@@ -365,7 +409,7 @@ TEST_P(DivisionFaultTest, DivisionByZeroThrows) {
 
   vm::VirtualMachine virt;
   virt.load_bytecode(code);
-  ASSERT_THROW(virt.run(), vm::DivisionByZeroException);
+  expect_vm_runtime_error([&] { virt.run(); }, vm::ErrorCode::DivisionByZero, 10, GetParam());
 }
 
 TEST_P(DivisionFaultTest, SignedOverflowThrows) {
@@ -378,7 +422,7 @@ TEST_P(DivisionFaultTest, SignedOverflowThrows) {
 
   vm::VirtualMachine virt;
   virt.load_bytecode(code);
-  ASSERT_THROW(virt.run(), vm::VmException);
+  expect_vm_runtime_error([&] { virt.run(); }, vm::ErrorCode::SignedOverflow, 10, GetParam());
 }
 
 INSTANTIATE_TEST_SUITE_P(DivisionOperations, DivisionFaultTest,
@@ -503,7 +547,7 @@ TEST(ControlFlowTest, JumpZeroUnderflow) {
 
   vm::VirtualMachine virt;
   virt.load_bytecode(code);
-  ASSERT_THROW(virt.run(), vm::StackUnderflowException);
+  expect_vm_runtime_error([&] { virt.run(); }, vm::ErrorCode::StackUnderflow, 0, vm::Opcode::JZ);
 }
 
 TEST(ControlFlowTest, JumpOutOfBounds) {
@@ -511,7 +555,7 @@ TEST(ControlFlowTest, JumpOutOfBounds) {
 
   vm::VirtualMachine virt;
   virt.load_bytecode(code);
-  ASSERT_THROW(virt.run(), vm::VmException);
+  expect_vm_runtime_error([&] { virt.run(); }, vm::ErrorCode::JumpOutOfBounds, 0, vm::Opcode::JMP);
 }
 
 TEST(MemoryOperationsTest, StoreLoad) {
@@ -529,11 +573,13 @@ TEST(MemoryOperationsTest, MemoryOutOfBounds) {
 
   vm::VirtualMachine virt({.memory_size = 1});
   virt.load_bytecode(code);
-  ASSERT_THROW(virt.run(), vm::MemoryOutOfBoundsException);
+  expect_vm_runtime_error([&] { virt.run(); }, vm::ErrorCode::MemoryOutOfBounds, 10,
+                          vm::Opcode::STORE);
 
   code = vm::test::BytecodeBuilder().push(1000).load().halt().build();
   virt.load_bytecode(code);
-  ASSERT_THROW(virt.run(), vm::MemoryOutOfBoundsException);
+  expect_vm_runtime_error([&] { virt.run(); }, vm::ErrorCode::MemoryOutOfBounds, 5,
+                          vm::Opcode::LOAD);
 }
 
 TEST(MemoryOperationsTest, NegativeAddressOutOfBounds) {
@@ -541,11 +587,13 @@ TEST(MemoryOperationsTest, NegativeAddressOutOfBounds) {
 
   vm::VirtualMachine virt;
   virt.load_bytecode(code);
-  ASSERT_THROW(virt.run(), vm::MemoryOutOfBoundsException);
+  expect_vm_runtime_error([&] { virt.run(); }, vm::ErrorCode::MemoryOutOfBounds, 10,
+                          vm::Opcode::STORE);
 
   code = vm::test::BytecodeBuilder().push(-1).load().halt().build();
   virt.load_bytecode(code);
-  ASSERT_THROW(virt.run(), vm::MemoryOutOfBoundsException);
+  expect_vm_runtime_error([&] { virt.run(); }, vm::ErrorCode::MemoryOutOfBounds, 5,
+                          vm::Opcode::LOAD);
 }
 
 TEST(IntegrationLoopTest, LoopAccumulator) {

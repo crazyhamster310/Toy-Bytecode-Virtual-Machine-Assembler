@@ -1,6 +1,6 @@
 .PHONY: help check clean test-e2e
-.PHONY: setup-asm test-asm lint-asm format-asm check-asm
-.PHONY: build-vm test-vm lint-vm format-vm check-vm
+.PHONY: setup-asm test-asm lint-asm format-asm check-asm build-asm-dist
+.PHONY: build-vm build-vm-release test-vm lint-vm format-vm check-vm
 
 ASM_DIR   := assembler
 VENV_DIR  := $(CURDIR)/$(ASM_DIR)/.venv
@@ -9,6 +9,9 @@ PIP       := $(VENV_DIR)/bin/pip
 PYTEST    := $(VENV_DIR)/bin/pytest
 RUFF      := $(VENV_DIR)/bin/ruff
 MYPY      := $(VENV_DIR)/bin/mypy
+
+BUILD_DIR_DEBUG   ?= build/debug
+BUILD_DIR_RELEASE ?= build/release
 
 all: check
 
@@ -43,24 +46,33 @@ format-asm: | $(VENV_DIR) ## Format assembler source code
 
 check-asm: lint-asm test-asm ## Run all assembler verifications
 
-build-vm: ## Configure and build virtual machine runtime
-	cmake -B build -S . -DCMAKE_BUILD_TYPE=Debug && cmake --build build
+build-asm-dist: | $(VENV_DIR) ## Build distribution wheel and tarball for assembler
+	$(PIP) install build
+	cd $(ASM_DIR) && $(PYTHON) -m build
+
+build-vm: ## Build VM runtime in Debug mode
+	cmake -B $(BUILD_DIR_DEBUG) -S . -DCMAKE_BUILD_TYPE=Debug -DENABLE_SANITIZERS=ON -DBUILD_TESTING=ON
+	cmake --build $(BUILD_DIR_DEBUG)
+
+build-vm-release: ## Build VM runtime in Release mode
+	cmake -B $(BUILD_DIR_RELEASE) -S . -DCMAKE_BUILD_TYPE=Release -DENABLE_SANITIZERS=OFF -DBUILD_TESTING=OFF
+	cmake --build $(BUILD_DIR_RELEASE) --target byte-vm
 
 test-vm: build-vm ## Run virtual machine tests
-	ctest --test-dir build --output-on-failure
+	ctest --test-dir $(BUILD_DIR_DEBUG) --output-on-failure
 
 format-vm: ## Format virtual machine source code
 	find runtime -name '*.hpp' -o -name '*.cpp' | xargs clang-format -i
 
 lint-vm: build-vm ## Run static analyzer on virtual machine code
-	clang-tidy -p build runtime/src/*.cpp runtime/tests/*.cpp
+	clang-tidy -p $(BUILD_DIR_DEBUG) --header-filter='runtime/.*' runtime/src/*.cpp runtime/tests/*.cpp
 
 check-vm: lint-vm test-vm ## Run all VM verifications
 
 test-e2e: build-vm | $(VENV_DIR) ## Run end-to-end integration test
 	@echo "==> Running E2E: Factorial"
 	$(PYTHON) -m byte_asm.cli examples/factorial.asm -o examples/factorial.bin
-	@FACT_OUT=$$(./build/byte-vm examples/factorial.bin) && \
+	@FACT_OUT=$$($(BUILD_DIR_DEBUG)/byte-vm examples/factorial.bin) && \
 	if [ "$$FACT_OUT" = "120" ]; then \
 		echo "    [PASS] factorial(5) = $$FACT_OUT"; \
 	else \
@@ -68,7 +80,7 @@ test-e2e: build-vm | $(VENV_DIR) ## Run end-to-end integration test
 	fi
 	@echo "==> Running E2E: Fibonacci"
 	$(PYTHON) -m byte_asm.cli examples/fibonacci.asm -o examples/fibonacci.bin
-	@FIB_OUT=$$(./build/byte-vm examples/fibonacci.bin) && \
+	@FIB_OUT=$$($(BUILD_DIR_DEBUG)/byte-vm examples/fibonacci.bin) && \
 	if [ "$$FIB_OUT" = "55" ]; then \
 		echo "    [PASS] fibonacci(10) = $$FIB_OUT"; \
 	else \

@@ -24,9 +24,12 @@ class VirtualMachine {
   bool halted_{false};
   std::reference_wrapper<std::ostream> out_;
 
-  uint8_t fetch_u8();
-  int32_t fetch_i32();
-  uint32_t fetch_u32();
+  int32_t fetch_i32(size_t instr_ip, Opcode opcode);
+  uint32_t fetch_u32(size_t instr_ip, Opcode opcode);
+
+  void require_stack(size_t count, size_t instr_ip, Opcode opcode);
+  void ensure_stack_capacity(size_t needed, size_t instr_ip, Opcode opcode);
+  void require_memory_bounds(uint32_t address, size_t instr_ip, Opcode opcode);
 
  public:
   explicit VirtualMachine(const VmConfig& config = VmConfig(), std::ostream& out = std::cout)
