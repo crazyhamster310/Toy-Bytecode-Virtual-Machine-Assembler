@@ -1,11 +1,11 @@
 #include <filesystem>
-#include <fstream>
 #include <iostream>
 #include <span>
 #include <string_view>
 #include <vector>
 
 #include "vm/errors.hpp"
+#include "vm/file_io.hpp"
 #include "vm/vm.hpp"
 
 namespace {
@@ -18,27 +18,6 @@ void print_usage(std::ostream& stream, std::string_view program_name) {
          << "Options:\n"
          << "  -h, --help       Display this help message and exit\n"
          << "  -t, --trace      Enable execution tracing to stderr\n";
-}
-
-std::vector<uint8_t> read_file(const std::filesystem::path& path) {
-  if (!std::filesystem::exists(path)) {
-    throw std::runtime_error("file '" + path.string() + "' does not exist");
-  }
-
-  if (!std::filesystem::is_regular_file(path)) {
-    throw std::runtime_error("'" + path.string() + "' is not a regular file");
-  }
-
-  std::ifstream ifs(path, std::ios::binary);
-
-  if (!ifs.is_open()) {
-    throw std::runtime_error("failed to open '" + path.string() +
-                             "': permission denied or I/O failure");
-  }
-
-  std::vector<uint8_t> buffer((std::istreambuf_iterator<char>(ifs)),
-                              std::istreambuf_iterator<char>());
-  return buffer;
 }
 
 }  // namespace
@@ -82,7 +61,7 @@ int main(int argc, char* argv[]) {
   }
 
   try {
-    std::vector<uint8_t> bytecode = read_file(bytecode_path);
+    std::vector<uint8_t> bytecode = vm::read_binary_file(bytecode_path);
 
     vm::VirtualMachine virt({.trace = trace_enabled});
     virt.load_bytecode(bytecode);

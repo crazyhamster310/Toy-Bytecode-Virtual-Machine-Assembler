@@ -21,11 +21,21 @@ make check
 make build-vm-release
 ```
 
-Assemble and execute an example:
+### Assemble, Execute, Trace, and Disassemble
+
 ```bash
+# 1. Assemble source to binary bytecode
 assembler/.venv/bin/byte-asm examples/factorial.asm -o examples/factorial.bin
-./build/release/byte-vm examples/factorial.bin
+
+# 2. Execute on C++ runtime (reading input from stdin)
+echo 5 | ./build/release/byte-vm examples/factorial.bin
 # Output: 120
+
+# 3. Execute with real-time instruction tracing
+echo 5 | ./build/release/byte-vm --trace examples/factorial.bin
+
+# 4. Disassemble binary bytecode back to instruction listing
+./build/release/byte-disasm examples/factorial.bin
 ```
 
 ## Binary Format (BVM1)
@@ -68,57 +78,158 @@ Jump addresses are absolute byte offsets relative to the start of the bytecode s
 | `LOAD`  | `0x50` | -               | 1 B | `[addr] -> [val]`   | Read `memory[addr]` |
 | `STORE` | `0x51` | -               | 1 B | `[val, addr] -> []` | Write `memory[addr] = val` |
 
-## Assembly Syntax
+## Assembly Example
 
 ```text
-; Comments start with semicolon
-        READ
+; Memory layout:
+;   memory[0] = N (counter)
+;   memory[1] = accumulator (result)
+
+        READ            ; Read input N from stdin
         PUSH 0
-        STORE           ; memory[0] = 10
+        STORE           ; memory[0] = N
+
+        PUSH 1
+        PUSH 1
+        STORE           ; memory[1] = 1 (accumulator)
 
 loop:
         PUSH 0
-        LOAD
+        LOAD            ; Load N onto stack
         DUP
-        JZ end          ; while memory[0] != 0
         PUSH 1
-        SUB
+        GT              ; Check if N > 1
+        JZ end          ; If N <= 1, exit loop
+
+        ; accumulator = accumulator * N
+        DUP             ; Duplicate N for multiplication
+        PUSH 1
+        LOAD            ; Load accumulator
+        MUL             ; Multiply accumulator * N
+        PUSH 1
+        STORE           ; memory[1] = new accumulator
+
+        ; N = N - 1
+        PUSH 1
+        SUB             ; Decrement N
         PUSH 0
-        STORE
+        STORE           ; memory[0] = N - 1
+
         JMP loop
 
 end:
-        POP
-        PUSH 42
-        PRINT
+        POP             ; Discard duplicate N left by DUP
+        PUSH 1
+        LOAD            ; Load final result from memory[1]
+        PRINT           ; Print result to stdout
         HALT
+```
+
+## Execution Tracing (`-t`, `--trace`)
+
+Running `byte-vm` with `--trace` produces structured execution diagnostics to `stderr` alongside program execution:
+
+```text
+[IP: 0x00000000] READ             | In => 1            | Stack: [1]
+[IP: 0x00000001] PUSH 0           |                    | Stack: [1, 0]
+[IP: 0x00000006] STORE            | Mem[0] <= 1        | Stack: []
+[IP: 0x00000007] PUSH 1           |                    | Stack: [1]
+[IP: 0x0000000C] PUSH 1           |                    | Stack: [1, 1]
+[IP: 0x00000011] STORE            | Mem[1] <= 1        | Stack: []
+[IP: 0x00000012] PUSH 0           |                    | Stack: [0]
+[IP: 0x00000017] LOAD             | Mem[0] => 1        | Stack: [1]
+[IP: 0x00000018] DUP              |                    | Stack: [1, 1]
+[IP: 0x00000019] PUSH 1           |                    | Stack: [1, 1, 1]
+[IP: 0x0000001E] GT               |                    | Stack: [1, 0]
+[IP: 0x0000001F] JZ 0x00000043    |                    | Stack: [1]
+[IP: 0x00000043] POP              |                    | Stack: []
+[IP: 0x00000044] PUSH 1           |                    | Stack: [1]
+[IP: 0x00000049] LOAD             | Mem[1] => 1        | Stack: [1]
+[IP: 0x0000004A] PRINT            | Out <= 1           | Stack: []
+[IP: 0x0000004B] HALT             |                    | Stack: []
+```
+
+- Column 1: 32-bit hex instruction pointer (`[IP: 0x00000000]`)
+- Column 2: Instruction mnemonic and immediate operand (if present)
+- Column 3: Directional external I/O and memory access events (`In =>`, `Out <=`, `Mem[] <=`, `Mem[] =>`)
+- Column 4: Snapshot of the evaluation stack after instruction execution
+
+## Disassembly Output
+
+`byte-disasm` outputs disassembly listings with 32-bit byte offsets:
+
+```text
+0x00000000: READ
+0x00000001: PUSH 0
+0x00000006: STORE
+0x00000007: PUSH 1
+0x0000000C: PUSH 1
+0x00000011: STORE
+0x00000012: PUSH 0
+0x00000017: LOAD
+0x00000018: DUP
+0x00000019: PUSH 1
+0x0000001E: GT
+0x0000001F: JZ 0x00000043
+0x00000024: DUP
+0x00000025: PUSH 1
+0x0000002A: LOAD
+0x0000002B: MUL
+0x0000002C: PUSH 1
+0x00000031: STORE
+0x00000032: PUSH 1
+0x00000037: SUB
+0x00000038: PUSH 0
+0x0000003D: STORE
+0x0000003E: JMP 0x00000012
+0x00000043: POP
+0x00000044: PUSH 1
+0x00000049: LOAD
+0x0000004A: PRINT
+0x0000004B: HALT
+```
+
+## Error Diagnostics
+
+Runtime errors report the instruction pointer (`IP`), mnemonic, and failure details:
+
+```text
+error: [IP: 0x0000000E] (DIV): division by zero
+error: [IP: 0x00000005] (ADD): stack underflow: requires 2 operand(s), available: 1
+error: [IP: 0x00000014] (LOAD): memory out of bounds: address 0xFFFFFFFF exceeds size 16384
+error: invalid magic bytes: expected 'BVM1'
 ```
 
 ## Project Structure
 
 ```text
 .
-├── Makefile              # Build, test, lint, format targets
-├── CMakeLists.txt        # C++ build definition
-├── assembler/            # Python package (byte-asm)
-│   ├── pyproject.toml    # Tooling config (ruff, mypy, pytest)
+├── Makefile                # Build, test, lint, format targets
+├── CMakeLists.txt          # C++ build definition
+├── assembler/              # Python package (byte-asm)
+│   ├── pyproject.toml      # Tooling config (ruff, mypy, pytest)
 │   ├── src/byte_asm/
-│   │   ├── isa.py        # Single source of truth for opcodes
-│   │   ├── lexer.py      # Token scanner
-│   │   ├── parser.py     # Two-pass AST and label resolution
-│   │   ├── emitter.py    # Binary bytecode packing
-│   │   └── cli.py        # CLI entry point
+│   │   ├── isa.py          # Single source of truth for opcodes
+│   │   ├── lexer.py        # Token scanner
+│   │   ├── parser.py       # Two-pass AST and label resolution
+│   │   ├── emitter.py      # Binary bytecode packing
+│   │   └── cli.py          # CLI entry point
 │   └── tests/
-├── runtime/              # C++ VM implementation (byte-vm)
+├── runtime/                # C++ implementation (byte-vm and byte-disasm)
 │   ├── include/vm/
-│   │   ├── errors.hpp    # Exception hierarchy
-│   │   ├── memory.hpp    # EvaluationStack and LinearMemory
-│   │   ├── opcodes.hpp   # Opcode enum and constants
-│   │   └── vm.hpp        # VirtualMachine class definition
+│   │   ├── disasm.hpp      # Disassembler engine interface
+│   │   ├── errors.hpp      # Exception hierarchy
+│   │   ├── file_io.hpp     # Binary file loading utilities
+│   │   ├── memory.hpp      # EvaluationStack and LinearMemory
+│   │   ├── opcodes.hpp     # Opcode enum and constants
+│   │   └── vm.hpp          # VirtualMachine class definition
 │   ├── src/
-│   │   ├── main.cpp      # CLI binary entry point
-│   │   └── vm.cpp        # Instruction dispatch loop
-│   └── tests/            # GoogleTest unit tests
+│   │   ├── disasm.cpp      # DisassemblyEngine implementation
+│   │   ├── disasm_main.cpp # byte-disasm CLI entry point
+│   │   ├── file_io.cpp     # File reading implementation
+│   │   ├── main.cpp        # byte-vm CLI entry point
+│   │   └── vm.cpp          # Instruction dispatch loop
+│   └── tests/              # GoogleTest unit tests
 └── examples/
     ├── factorial.asm
     └── fibonacci.asm

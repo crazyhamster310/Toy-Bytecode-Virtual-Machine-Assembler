@@ -56,7 +56,7 @@ build-vm: ## Build VM runtime in Debug mode
 
 build-vm-release: ## Build VM runtime in Release mode
 	cmake -B $(BUILD_DIR_RELEASE) -S . -DCMAKE_BUILD_TYPE=Release -DENABLE_SANITIZERS=OFF -DBUILD_TESTING=OFF
-	cmake --build $(BUILD_DIR_RELEASE) --target byte-vm
+	cmake --build $(BUILD_DIR_RELEASE) --target byte-vm byte-disasm
 
 test-vm: build-vm ## Run virtual machine tests
 	ctest --test-dir $(BUILD_DIR_DEBUG) --output-on-failure
