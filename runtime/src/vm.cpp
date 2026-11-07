@@ -6,6 +6,58 @@
 
 #include "vm/errors.hpp"
 
+namespace {
+
+std::string escape_char(char character) {
+  switch (character) {
+    case '\n':
+      return "\\n";
+    case '\t':
+      return "\\t";
+    case '\r':
+      return "\\r";
+    case '\0':
+      return "\\0";
+    case '\'':
+      return "\\\'";
+    case '\\':
+      return "\\\\";
+    default:
+      break;
+  }
+
+  const auto uchar = static_cast<unsigned char>(character);
+  if (std::isprint(uchar) != 0) {
+    return {character};
+  }
+  return std::format("\\x{:02X}", uchar);
+}
+
+std::string format_stack(std::span<const int32_t> data) {
+  std::string result;
+  for (size_t i = 0; i < data.size(); ++i) {
+    if (i > 0) {
+      result += ", ";
+    }
+    result += std::to_string(data[i]);
+  }
+  return result;
+}
+
+void require_valid_divisor(int32_t lhs, int32_t rhs, size_t instr_ip, vm::Opcode opcode) {
+  if (rhs == 0) [[unlikely]] {
+    throw vm::VmRuntimeError(instr_ip, opcode, vm::ErrorCode::DivisionByZero, "division by zero");
+  }
+
+  if (lhs == std::numeric_limits<int32_t>::min() && rhs == -1) [[unlikely]] {
+    throw vm::VmRuntimeError(instr_ip, opcode, vm::ErrorCode::SignedOverflow,
+                             opcode == vm::Opcode::DIV ? "signed arithmetic overflow in division"
+                                                       : "signed arithmetic overflow in modulo");
+  }
+}
+
+}  // namespace
+
 namespace vm {
 
 void VirtualMachine::load_bytecode(std::span<const uint8_t> bytecode) {
@@ -86,19 +138,6 @@ void VirtualMachine::require_memory_bounds(uint32_t address, size_t instr_ip, Op
   }
 }
 
-void VirtualMachine::require_valid_divisor(int32_t lhs, int32_t rhs, size_t instr_ip,
-                                           Opcode opcode) {
-  if (rhs == 0) [[unlikely]] {
-    throw VmRuntimeError(instr_ip, opcode, ErrorCode::DivisionByZero, "division by zero");
-  }
-
-  if (lhs == std::numeric_limits<int32_t>::min() && rhs == -1) [[unlikely]] {
-    throw VmRuntimeError(instr_ip, opcode, ErrorCode::SignedOverflow,
-                         opcode == Opcode::DIV ? "signed arithmetic overflow in division"
-                                               : "signed arithmetic overflow in modulo");
-  }
-}
-
 size_t VirtualMachine::fetch_jump_address(size_t instr_ip, Opcode opcode) {
   auto address = static_cast<size_t>(fetch_u32(instr_ip, opcode));
   if (address >= bytecode_.size()) [[unlikely]] {
@@ -125,6 +164,12 @@ void VirtualMachine::step() {
   const uint8_t raw_op = bytecode_[ip_++];
   const auto opcode = static_cast<Opcode>(raw_op);
 
+  std::string instr_str;
+  std::string effect_str;
+  if (config_.trace) {
+    instr_str = to_string(opcode);
+  }
+
   switch (opcode) {
     case Opcode::HALT: {
       halted_ = true;
@@ -132,7 +177,11 @@ void VirtualMachine::step() {
     }
     case Opcode::PUSH: {
       ensure_stack_capacity(1, instr_ip, opcode);
-      stack_.push(fetch_i32(instr_ip, opcode));
+      int32_t val = fetch_i32(instr_ip, opcode);
+      stack_.push(val);
+      if (config_.trace) {
+        instr_str = std::format("{} {}", to_string(opcode), val);
+      }
       break;
     }
     case Opcode::POP: {
@@ -210,7 +259,11 @@ void VirtualMachine::step() {
       break;
     }
     case Opcode::JMP: {
-      ip_ = fetch_jump_address(instr_ip, opcode);
+      auto address = fetch_jump_address(instr_ip, opcode);
+      ip_ = address;
+      if (config_.trace) {
+        instr_str = std::format("{} 0x{:08X}", to_string(opcode), address);
+      }
       break;
     }
     case Opcode::JZ: {
@@ -219,11 +272,18 @@ void VirtualMachine::step() {
       if (stack_.pop() == 0) {
         ip_ = address;
       }
+      if (config_.trace) {
+        instr_str = std::format("{} 0x{:08X}", to_string(opcode), address);
+      }
       break;
     }
     case Opcode::PRINT: {
       require_stack(1, instr_ip, opcode);
-      out_.get() << stack_.pop() << '\n';
+      auto val = stack_.pop();
+      out_.get() << val << '\n';
+      if (config_.trace) {
+        effect_str = std::format("Out <= {}", val);
+      }
       break;
     }
     case Opcode::READ: {
@@ -233,31 +293,50 @@ void VirtualMachine::step() {
         throw VmRuntimeError(instr_ip, opcode, ErrorCode::InputFailure, "input failure");
       }
       stack_.push(val);
+      if (config_.trace) {
+        effect_str = std::format("In => {}", val);
+      }
       break;
     }
     case Opcode::PUTC: {
       require_stack(1, instr_ip, opcode);
-      out_.get().put(static_cast<char>(stack_.pop()));
+      auto val = static_cast<char>(stack_.pop());
+      out_.get().put(val);
+      if (config_.trace) {
+        effect_str = std::format("Out <= '{}'", escape_char(val));
+      }
       break;
     }
     case Opcode::LOAD: {
       require_stack(1, instr_ip, opcode);
       auto address = static_cast<uint32_t>(stack_.pop());
       require_memory_bounds(address, instr_ip, opcode);
-      stack_.push(memory_.load(address));
+      auto val = memory_.load(address);
+      stack_.push(val);
+      if (config_.trace) {
+        effect_str = std::format("Mem[{}] => {}", address, val);
+      }
       break;
     }
     case Opcode::STORE: {
       require_stack(2, instr_ip, opcode);
       auto address = static_cast<uint32_t>(stack_.pop());
       require_memory_bounds(address, instr_ip, opcode);
-      int32_t value = stack_.pop();
-      memory_.store(address, value);
+      int32_t val = stack_.pop();
+      memory_.store(address, val);
+      if (config_.trace) {
+        effect_str = std::format("Mem[{}] <= {}", address, val);
+      }
       break;
     }
     default:
       throw VmRuntimeError(instr_ip, opcode, ErrorCode::InvalidOpcode,
                            std::format("invalid opcode: 0x{:02X}", raw_op));
+  }
+
+  if (config_.trace) {
+    trace_out_.get() << std::format("[IP: 0x{:08X}] {:<16} | {:<18} | Stack: [{}]\n", instr_ip,
+                                    instr_str, effect_str, format_stack(stack_.data()));
   }
 }
 

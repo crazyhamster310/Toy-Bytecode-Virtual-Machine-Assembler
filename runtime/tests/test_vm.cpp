@@ -1,3 +1,4 @@
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <concepts>
@@ -701,4 +702,50 @@ TEST(IntegrationLoopTest, LoopAccumulator) {
   ASSERT_EQ(virt.memory().load(1), 0);
   ASSERT_EQ(virt.stack().size(), 1);
   ASSERT_EQ(virt.stack().peek(), 6);
+}
+
+TEST(TraceTest, BasicExecutionTrace) {
+  auto code = vm::test::BytecodeBuilder().push(42).dup().add().halt().build();
+
+  std::ostringstream oss;
+  std::istringstream iss;
+  std::ostringstream trace_oss;
+  vm::VirtualMachine virt({.trace = true}, oss, iss, trace_oss);
+  virt.load_bytecode(code);
+  virt.run();
+
+  constexpr std::string_view expected =
+      R"([IP: 0x00000000] PUSH 42          |                    | Stack: [42]
+[IP: 0x00000005] DUP              |                    | Stack: [42, 42]
+[IP: 0x00000006] ADD              |                    | Stack: [84]
+[IP: 0x00000007] HALT             |                    | Stack: [84]
+)";
+  EXPECT_EQ(trace_oss.view(), expected);
+}
+
+TEST(TraceTest, MemoryAndIoAnnotations) {
+  auto code = vm::test::BytecodeBuilder()
+                  .read()
+                  .push(0)
+                  .store()
+                  .push(0)
+                  .load()
+                  .print()
+                  .push(65)
+                  .putc()
+                  .halt()
+                  .build();
+
+  std::ostringstream oss;
+  std::istringstream iss("5\n");
+  std::ostringstream trace_oss;
+  vm::VirtualMachine virt({.trace = true}, oss, iss, trace_oss);
+  virt.load_bytecode(code);
+  virt.run();
+
+  EXPECT_THAT(trace_oss.str(), ::testing::HasSubstr("In => 5"));
+  EXPECT_THAT(trace_oss.str(), testing::HasSubstr("Mem[0] <= 5"));
+  EXPECT_THAT(trace_oss.str(), testing::HasSubstr("Mem[0] => 5"));
+  EXPECT_THAT(trace_oss.str(), testing::HasSubstr("Out <= 5"));
+  EXPECT_THAT(trace_oss.str(), testing::HasSubstr("Out <= 'A'"));
 }

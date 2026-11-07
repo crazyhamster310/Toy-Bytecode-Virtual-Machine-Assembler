@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <utility>
 #include <vector>
 
@@ -51,6 +52,8 @@ class EvaluationStack {
   [[nodiscard]] bool empty() const { return sp_ == 0; }
 
   [[nodiscard]] size_t capacity() const { return max_size_; }
+
+  [[nodiscard]] std::span<const int32_t> data() const { return {buffer_.data(), sp_}; }
 
   void reset() { sp_ = 0; }
 };
