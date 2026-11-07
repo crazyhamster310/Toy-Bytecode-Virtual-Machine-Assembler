@@ -18,6 +18,8 @@ class Opcode(IntEnum):
     JMP = 0x30
     JZ = 0x31
     PRINT = 0x40
+    READ = 0x41
+    PUTC = 0x42
     LOAD = 0x50
     STORE = 0x51
 

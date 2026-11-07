@@ -23,6 +23,8 @@ enum class Opcode : uint8_t {
   JMP = 0x30,
   JZ = 0x31,
   PRINT = 0x40,
+  READ = 0x41,
+  PUTC = 0x42,
   LOAD = 0x50,
   STORE = 0x51,
 };
@@ -65,6 +67,10 @@ constexpr std::string_view to_string(Opcode opcode) {
       return "JZ";
     case Opcode::PRINT:
       return "PRINT";
+    case Opcode::READ:
+      return "READ";
+    case Opcode::PUTC:
+      return "PUTC";
     case Opcode::LOAD:
       return "LOAD";
     case Opcode::STORE:

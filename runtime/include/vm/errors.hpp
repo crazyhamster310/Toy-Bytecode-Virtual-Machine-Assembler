@@ -25,6 +25,7 @@ enum class ErrorCode : uint8_t {
   TruncatedInstruction,
   MissingHalt,
   ExecutionHalted,
+  InputFailure,
 };
 
 class VmException : public std::runtime_error {
@@ -51,7 +52,7 @@ class VmRuntimeError : public VmException {
  public:
   VmRuntimeError(size_t instr_ip, Opcode opcode, ErrorCode code, std::string_view message)
       : VmException(code,
-                    std::format("[IP: 0x{:04X}] ({}): {}", instr_ip, to_string(opcode), message)),
+                    std::format("[IP: 0x{:08X}] ({}): {}", instr_ip, to_string(opcode), message)),
         ip_(instr_ip),
         opcode_(opcode) {}
 

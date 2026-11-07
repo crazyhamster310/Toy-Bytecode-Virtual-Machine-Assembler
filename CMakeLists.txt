@@ -54,6 +54,7 @@ if(BUILD_TESTING)
         vm_project_options
         vm_core
         GTest::gtest_main
+        GTest::gmock
     )
 
     include(GoogleTest)

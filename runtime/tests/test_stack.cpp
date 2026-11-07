@@ -48,6 +48,20 @@ TEST(StackTest, Swap) {
   ASSERT_EQ(stack.peek(), 2);
 }
 
+TEST(StackTest, Data) {
+  vm::EvaluationStack stack;
+  stack.push(1);
+  stack.push(2);
+
+  ASSERT_EQ(stack.data().size(), 2);
+  ASSERT_EQ(stack.data()[0], 1);
+  ASSERT_EQ(stack.data()[1], 2);
+
+  stack.pop();
+  ASSERT_EQ(stack.data().size(), 1);
+  ASSERT_EQ(stack.data()[0], 1);
+}
+
 TEST(StackTest, Reset) {
   vm::EvaluationStack stack;
   stack.push(1);

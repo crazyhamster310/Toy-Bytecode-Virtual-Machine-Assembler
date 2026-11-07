@@ -72,7 +72,7 @@ check-vm: lint-vm test-vm ## Run all VM verifications
 test-e2e: build-vm | $(VENV_DIR) ## Run end-to-end integration test
 	@echo "==> Running E2E: Factorial"
 	$(PYTHON) -m byte_asm.cli examples/factorial.asm -o examples/factorial.bin
-	@FACT_OUT=$$($(BUILD_DIR_DEBUG)/byte-vm examples/factorial.bin) && \
+	@FACT_OUT=$$(echo "5" | $(BUILD_DIR_DEBUG)/byte-vm examples/factorial.bin) && \
 	if [ "$$FACT_OUT" = "120" ]; then \
 		echo "    [PASS] factorial(5) = $$FACT_OUT"; \
 	else \
@@ -80,7 +80,7 @@ test-e2e: build-vm | $(VENV_DIR) ## Run end-to-end integration test
 	fi
 	@echo "==> Running E2E: Fibonacci"
 	$(PYTHON) -m byte_asm.cli examples/fibonacci.asm -o examples/fibonacci.bin
-	@FIB_OUT=$$($(BUILD_DIR_DEBUG)/byte-vm examples/fibonacci.bin) && \
+	@FIB_OUT=$$(echo "10" | $(BUILD_DIR_DEBUG)/byte-vm examples/fibonacci.bin) && \
 	if [ "$$FIB_OUT" = "55" ]; then \
 		echo "    [PASS] fibonacci(10) = $$FIB_OUT"; \
 	else \

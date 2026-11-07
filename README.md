@@ -63,6 +63,8 @@ Jump addresses are absolute byte offsets relative to the start of the bytecode s
 | `JMP`   | `0x30` | `uint32`        | 5 B | `[] -> []`          | Jump to instruction offset |
 | `JZ`    | `0x31` | `uint32`        | 5 B | `[cond] -> []`      | Pop condition, jump if `cond == 0` |
 | `PRINT` | `0x40` | -               | 1 B | `[x] -> []`         | Pop integer and print to stdout with newline |
+| `READ`  | `0x41` | -               | 1 B | `[] -> [x]`         | Read signed 32-bit integer from stdin |
+| `PUTC`  | `0x42` | -               | 1 B | `[x] -> []`         | Pop integer and print lower byte as ASCII character |
 | `LOAD`  | `0x50` | -               | 1 B | `[addr] -> [val]`   | Read `memory[addr]` |
 | `STORE` | `0x51` | -               | 1 B | `[val, addr] -> []` | Write `memory[addr] = val` |
 
@@ -70,7 +72,7 @@ Jump addresses are absolute byte offsets relative to the start of the bytecode s
 
 ```text
 ; Comments start with semicolon
-        PUSH 10
+        READ
         PUSH 0
         STORE           ; memory[0] = 10
 
