@@ -38,6 +38,7 @@ test-asm: | $(VENV_DIR) ## Run assembler tests
 	cd assembler && ${PYTEST} -v
 
 lint-asm: | $(VENV_DIR) ## Run assembler linters and type checkers
+	cd assembler && ${RUFF} format --check .
 	cd assembler && ${RUFF} check .
 	cd assembler && ${MYPY} src tests
 
@@ -64,7 +65,8 @@ test-vm: build-vm ## Run virtual machine tests
 format-vm: ## Format virtual machine source code
 	find runtime -name '*.hpp' -o -name '*.cpp' | xargs clang-format -i
 
-lint-vm: build-vm ## Run static analyzer on virtual machine code
+lint-vm: build-vm ## Run format check and static analyzer on virtual machine code
+	find runtime -name '*.hpp' -o -name '*.cpp' | xargs clang-format --dry-run --Werror
 	clang-tidy -p $(BUILD_DIR_DEBUG) --header-filter='runtime/.*' runtime/src/*.cpp runtime/tests/*.cpp
 
 check-vm: lint-vm test-vm ## Run all VM verifications
