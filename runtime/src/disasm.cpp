@@ -1,5 +1,6 @@
 #include "vm/disasm.hpp"
 
+#include <algorithm>
 #include <format>
 #include <functional>
 #include <ostream>

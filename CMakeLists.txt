@@ -24,11 +24,19 @@ target_link_libraries(byte-vm PRIVATE vm_core)
 add_executable(byte-disasm runtime/src/disasm_main.cpp)
 target_link_libraries(byte-disasm PRIVATE vm_core)
 
+install(TARGETS byte-vm byte-disasm DESTINATION bin)
+
 add_library(vm_project_options INTERFACE)
-target_compile_options(vm_project_options INTERFACE
-    -Wall -Wextra -Wpedantic -Werror -Wconversion -Wshadow -Wswitch -Wswitch-enum
-    -Wnon-virtual-dtor -Wold-style-cast -Wcast-align -Wunused -Woverloaded-virtual
-)
+if(MSVC)
+    target_compile_options(vm_project_options INTERFACE
+        /W4 /WX /permissive- /utf-8
+    )
+else()
+    target_compile_options(vm_project_options INTERFACE
+        -Wall -Wextra -Wpedantic -Werror -Wconversion -Wshadow -Wswitch -Wswitch-enum
+        -Wnon-virtual-dtor -Wold-style-cast -Wcast-align -Wunused -Woverloaded-virtual
+    )
+endif()
 
 option(ENABLE_SANITIZERS "Enable Address and Undefined Behavior sanitizers" ON)
 if(ENABLE_SANITIZERS AND (CMAKE_BUILD_TYPE STREQUAL "Debug"))

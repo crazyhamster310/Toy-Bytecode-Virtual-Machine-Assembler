@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <format>
 #include <limits>
+#include <string>
 
 #include "vm/errors.hpp"
 
