@@ -13,11 +13,16 @@ endif()
 
 add_library(vm_core STATIC
     runtime/src/vm.cpp
+    runtime/src/disasm.cpp
+    runtime/src/file_io.cpp
 )
 target_include_directories(vm_core PUBLIC runtime/include)
 
 add_executable(byte-vm runtime/src/main.cpp)
 target_link_libraries(byte-vm PRIVATE vm_core)
+
+add_executable(byte-disasm runtime/src/disasm_main.cpp)
+target_link_libraries(byte-disasm PRIVATE vm_core)
 
 add_library(vm_project_options INTERFACE)
 target_compile_options(vm_project_options INTERFACE
@@ -33,6 +38,7 @@ endif()
 
 target_link_libraries(vm_core PRIVATE vm_project_options)
 target_link_libraries(byte-vm PRIVATE vm_project_options)
+target_link_libraries(byte-disasm PRIVATE vm_project_options)
 
 include(CTest)
 
@@ -49,6 +55,7 @@ if(BUILD_TESTING)
         runtime/tests/test_stack.cpp
         runtime/tests/test_memory.cpp
         runtime/tests/test_vm.cpp
+        runtime/tests/test_disasm.cpp
     )
     target_link_libraries(vm_tests PRIVATE
         vm_project_options
